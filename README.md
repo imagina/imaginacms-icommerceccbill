@@ -16,22 +16,29 @@ php artisan module:enable Icommerceccbill
 php artisan module:seed Icommerceccbill
 ```
 
-## Add response Urls
-https://ccbill.com/doc/managing-flexforms-payment-flows#ftoc-heading-10
+## Configure Response URLs
+Add the response URLs in the CCBill configuration. See the official documentation for more details: [Managing FlexForms Payment.](https://ccbill.com/doc/managing-flexforms-payment-flows#ftoc-heading-10)
 
-add this URL:
+URL to response (BOTH):
+```
 https://mydomain/icommerceccbill/payment/response/
+```
 
-## URL Notifications
-https://ccbill.com/doc/webhooks-overview#introduction
+## Configure URL Notifications (Webhooks)
+Set up Webhooks in CCBill following the official documentation: [Webhooks Overview.](https://ccbill.com/doc/webhooks-overview#introduction)
 
-add this url:
+Confirmation URL:
+```
 https://mydomain/api/icommerceccbill/v1/confirmation
+```
 
-Check only this events: NewSaleSuccess, NewSaleFailure
+Allowed Events:
+
+- NewSaleSuccess
+- NewSaleFailure
 
 ## Tests
 
-Configurations: https://ccbill.com/doc/admin-portal-faq#ftoc-heading-11
+Follow the specific configurations described in the official documentation: [Admin Portal FAQ.](https://ccbill.com/doc/admin-portal-faq#ftoc-heading-11)
 
-Testing Cards: https://ccbill.com/kb/test-credit-card-numbers#ftoc-heading-3
+To perform tests with cards, use the numbers provided here: [Test Credit Card Numbers.](https://ccbill.com/kb/test-credit-card-numbers#ftoc-heading-6)

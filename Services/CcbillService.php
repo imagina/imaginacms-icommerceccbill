@@ -62,8 +62,9 @@ class CcbillService
   {
     //Set price format
     $price = number_format($order->total, 2, '.', '');
-    //An integer representing the length, in days, of the initial billing period. By default, the value for non-recurring prices is between 2 and 365.
-    $initialPeriod = 2;
+
+    $initialPeriod = $this->getInitialPeriod($order);
+
     //Return CCBill code
     $currencyCode = $this->getCurrencyCode($order->currency_code);
 
@@ -72,6 +73,27 @@ class CcbillService
       'initialPeriod' => $initialPeriod,
       'currencyCode' => $currencyCode
     ];
+  }
+
+  /**
+   * Initial period | Depends if is recurring or not
+   */
+  private function getInitialPeriod($order): int
+  {
+    //An integer representing the length, in days, of the initial billing period. By default, the value for non-recurring prices is between 2 and 365.
+    $initialPeriod = 2;
+
+    $planRepository = app("Modules\Iplan\Repositories\PlanRepository");
+
+    foreach ($order->orderItems as $item) {
+      if($item->entity_type=='Modules\Iplan\Entities\Plan'){
+        $planIdInOrderItem = $item->entity_id;
+        $plan = $planRepository->getItem($planIdInOrderItem);
+        return $plan->frequency_id;
+      }
+    }
+
+    return $initialPeriod;
   }
 
   /**

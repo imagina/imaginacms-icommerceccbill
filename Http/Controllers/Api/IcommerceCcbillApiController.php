@@ -151,7 +151,7 @@ class IcommerceCcbillApiController extends BaseApiController
       try {
 
         $data = $request->all();
-        //\Log::info($this->log . 'Confirmation|DATA: '.json_encode($data));
+        \Log::info($this->log . 'Confirmation|DATA: '.json_encode($data));
 
         if (isset($data['X-formDigest'])){
 
@@ -162,7 +162,7 @@ class IcommerceCcbillApiController extends BaseApiController
           \Log::info($this->log.'Order Status Id: '.$order->status_id);
 
           // Status Order 'pending' or 'failed' (The platform allows you to retry the payment right there)
-          if ($order->status_id == 1 || $order->status_id == 7) {
+          //if ($order->status_id == 1 || $order->status_id == 7) {
 
             // Default Status Order
             $newStatusOrder = 7; // Status Order Failed
@@ -171,11 +171,14 @@ class IcommerceCcbillApiController extends BaseApiController
             $transactionState = $data['eventType'] ?? null;
             \Log::info($this->log.'trasanctionState: '.$transactionState);
 
-            //Get Code Transaction
+            //Information about codTransactionState to save in comment later
             $codTransactionState = $this->ccbillService->getCodtransactionState($transactionState,$data);
 
+            //Get Params from Recurrence
+            $paramsRecurrence = $this->ccbillService->getParamsRecurrence(null,null,null,$data);
+
             // Get Digest | formatArguments null and send order to this case
-            $digest = $this->ccbillService->createDigest($this->paymentMethod->options->saltKey,null,$order);
+            $digest = $this->ccbillService->createDigest($this->paymentMethod->options->saltKey,null,$order,$data['initialPeriod'],$paramsRecurrence);
 
             // Check signatures
             if ($digest == $data['X-formDigest']) {
@@ -194,19 +197,38 @@ class IcommerceCcbillApiController extends BaseApiController
               //Comment Base + Information about codTransactionState
               $comment =  trans('icommerce::paymentmethods.messages.update by',['paymentMethod'=>'CCBill'])." --- ".$codTransactionState;
 
+              //Data Update order
+              $dataToUpdateOrder =['order_id' => $order->id,'status_id' => $newStatusOrder,"comment" => $comment];
+
+              //Add Atributtes to Options in Order Status History
+              $optionsHistory = ["transactionId" => $data['transactionId'] ?? null];
+
+              //Save subscriptionId  and other data
+              $this->ccbillService->saveExtraDataInOptions($data,$order,$dataToUpdateOrder,$optionsHistory);
+
+              //Add options history to save later
+              $dataToUpdateOrder["optionsHistory"] = $optionsHistory;
+
               //Update Order
               $orderUP = $this->validateResponseApi(
-                $this->orderController->update($order->id, new Request(["attributes" =>[
-                  'order_id' => $order->id, 'status_id' => $newStatusOrder, "comment" => $comment
-                  ]
-                ]))
+                $this->orderController->update($order->id, new Request(["attributes" => $dataToUpdateOrder]))
               );
+
+
+              //Si la informacion que llega es: Plan Recurrente, Orden ya tiene un subscription ID, Y cumple que con algun estado que se deba cancelar
+              $cancelSubscription =  $this->ccbillService->cancelSubscriptionFromStatus($transactionState,$newStatusOrder);
+              if($data['X-customPlanRecu'] && $order->suscription_id && $cancelSubscription)
+              {
+                $subscriptionService = app("Modules\Iplan\Services\SubscriptionService");
+                $subscriptionService->setSubscritionToInactive((int)$order->suscription_id);
+              }
+
 
             }else{
               throw new \Exception("ERROR - Wrong Digest", 401); //401 Unauthorized
             }
 
-          }
+          //}
 
         }else{
           throw new \Exception("WARNING - X-formDigest not found", 401);
@@ -216,7 +238,7 @@ class IcommerceCcbillApiController extends BaseApiController
 
 
       } catch (\Exception $e) {
-        \Log::error($this->log . 'Message: ' . $e->getMessage());
+        \Log::error($this->log . ' Message: ' . $e->getMessage() . ' File: ' . $e->getFile() . ' Line: ' . $e->getLine());
         \Log::error($this->log . 'Code: ' . $e->getCode());
       }
 

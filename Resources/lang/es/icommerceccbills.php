@@ -22,6 +22,9 @@ return [
         'subAccountNumber' => 'Sub Account Number',
         'flexFormId' => 'Flex Form Id',
         'saltKey' => 'Salt Key',
+        'userName' => 'User Name',
+        'pass' => 'Pass',
+        'used by api' => '[Datalink System - API]'
     ],
     'form' => [
     ],

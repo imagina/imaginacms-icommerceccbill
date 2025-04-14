@@ -29,7 +29,15 @@ class CcbillService
 
     \Log::info($this->log . "generateLink");
 
-    $formatArguments = $this->formatArguments($order);
+    $plan = $this->getPlan($order);
+
+    //Formats specifics
+    $formatArguments = $this->formatArguments($order,$plan->frequency_id);
+
+    $initialPeriod = $plan->frequency_id;
+
+    //Only case recurrence
+    $paramsRecurrence = $this->getParamsRecurrence($plan,$formatArguments,$initialPeriod);
 
     //Params
     $ccbillArgs = [
@@ -37,7 +45,7 @@ class CcbillService
       'clientSubacc' => $paymentMethod->options->subAccountNumber,
       'formName' => $paymentMethod->options->flexFormId,
       'initialPrice' => $formatArguments['price'],
-      'initialPeriod' => $formatArguments['initialPeriod'],
+      'initialPeriod' => $initialPeriod,
       'currencyCode' => $formatArguments['currencyCode'],
       'customer_fname' => $order->first_name,
       'customer_lname' => $order->last_name,
@@ -48,11 +56,17 @@ class CcbillService
       'state' => $this->getPaymentZone($order),
       'address1' => $order->payment_address_1 ?? '',
       'customOrderRef' => $this->getOrderRefCommerce($order, $transaction),
-      'formDigest' => $this->createDigest($paymentMethod->options->saltKey, $formatArguments),
+      'customPlanRecu' => $plan->is_recurring,
+      'formDigest' => $this->createDigest($paymentMethod->options->saltKey, $formatArguments,null,$initialPeriod, $paramsRecurrence),
       'productDesc' => "Payment to Order Id: ".$order->id
     ];
 
+    //Check Plan recurrence
+    if(!is_null($paramsRecurrence))
+      $ccbillArgs = array_merge($ccbillArgs, $paramsRecurrence);
+
     return $this->makeUrl($paymentMethod->options->flexFormId, $ccbillArgs);
+
   }
 
   /**
@@ -63,50 +77,48 @@ class CcbillService
     //Set price format
     $price = number_format($order->total, 2, '.', '');
 
-    $initialPeriod = $this->getInitialPeriod($order);
-
     //Return CCBill code
     $currencyCode = $this->getCurrencyCode($order->currency_code);
 
     return [
       'price' => $price,
-      'initialPeriod' => $initialPeriod,
       'currencyCode' => $currencyCode
     ];
   }
 
   /**
-   * Initial period | Depends if is recurring or not
+   * Get plan from order
    */
-  private function getInitialPeriod($order): int
+  private function getPlan($order)
   {
-    //An integer representing the length, in days, of the initial billing period. By default, the value for non-recurring prices is between 2 and 365.
-    $initialPeriod = 2;
-
     $planRepository = app("Modules\Iplan\Repositories\PlanRepository");
 
     foreach ($order->orderItems as $item) {
       if($item->entity_type=='Modules\Iplan\Entities\Plan'){
         $planIdInOrderItem = $item->entity_id;
         $plan = $planRepository->getItem($planIdInOrderItem);
-        return $plan->frequency_id;
+        return $plan;
       }
     }
-
-    return $initialPeriod;
   }
 
   /**
    * Create Hash
+   * This used in the confirmation too
    */
-  public function createDigest($salt, $formatArguments = null, $order = null): string
+  public function createDigest($salt, $formatArguments = null, $order = null, $initialPeriod, $paramsRecurrence = null): string
   {
 
     if (is_null($formatArguments))
       $formatArguments = $this->formatArguments($order);
 
-    //Union
-    $stringToHash = $formatArguments['price'] . $formatArguments['initialPeriod'] . $formatArguments['currencyCode'] . $salt;
+    //Validation
+    if(is_null($paramsRecurrence))
+      $stringToHash = $formatArguments['price'] . $initialPeriod . $formatArguments['currencyCode'] . $salt;
+    else
+      $stringToHash = $formatArguments['price'] . $initialPeriod . $paramsRecurrence['recurringPrice'] . $paramsRecurrence['recurringPeriod'] . $paramsRecurrence['numRebills'] . $formatArguments['currencyCode'] . $salt;
+    //\Log::info($this->log . "createDigest: ". $stringToHash);
+
     //Return MD5
     return md5($stringToHash);
   }
@@ -200,6 +212,14 @@ class CcbillService
         $newStatus = 7; //failed
         break;
 
+      case "RenewalSuccess":
+          $newStatus = 13; //processed
+          break;
+
+      case "RenewalFailure":
+          $newStatus = 7; //failed
+          break;
+
       case "Cancellation":
         $newStatus = 3; //cancelled
         break;
@@ -241,18 +261,86 @@ class CcbillService
 
     $codTransactionState = "";
 
-    if($transactionState=="NewSaleSuccess"){
-      $codTransactionState =  "transactionId: ".$data['transactionId'];
-    }else{
-      if(isset($data['transactionId']))
-        $codTransactionState =  "transactionId: ".$data['transactionId']." - Reason: ".$data['failureReason'];
-      else
-        $codTransactionState =  "Reason: ".$data['failureReason']; //Because to mode sandbox if the ip is not register not exis transaction
+    if ($transactionState == "NewSaleSuccess") {
+      $codTransactionState = "transactionId: " . $data['transactionId'];
+    } else {
+        $failureReason = $data['failureReason'] ?? '';
+        if (isset($data['transactionId'])) {
+            $codTransactionState = "transactionId: " . $data['transactionId'] . " - Reason: " . (!empty($failureReason) ? $failureReason : "");
+        } else {
+            $codTransactionState = "Reason: " . (!empty($failureReason) ? $failureReason : ""); // Para modo sandbox si la IP no está registrada y no existe transacción
+        }
     }
 
     \Log::info($this->log.'codTransactionState: '.$codTransactionState);
 
     return $codTransactionState;
+  }
+
+  /**
+   * Get params, before to go payment and after (In confirmation)
+   */
+  public function getParamsRecurrence($plan=null,$formatArguments=null,$initialPeriod=null,$dataFromResponse=null)
+  {
+
+    //Set params to recurrence before send to ccbill
+    if(!is_null($plan) && $plan->is_recurring){
+      return [
+        'recurringPrice' => $formatArguments['price'],
+        'recurringPeriod' => $initialPeriod,
+        'numRebills' => 99
+      ];
+    }
+
+    //Get params recurrence from CCBILL
+    if(!is_null($dataFromResponse) && $dataFromResponse['X-customPlanRecu']){
+      return [
+        'recurringPrice' => $dataFromResponse['subscriptionRecurringPrice'],
+        'recurringPeriod' => $dataFromResponse['recurringPeriod'],
+        'numRebills' => 99
+      ];
+    }
+
+    return null;
+  }
+
+  /**
+   * @param data (Response from CCBILL)
+   * Update the comment, save subscription id in options (Order and OrderStatusHistory)
+   */
+  public function saveExtraDataInOptions($data,$order,&$dataToUpdateOrder,&$optionsHistory)
+  {
+
+    //Save subscriptionId Only to recurrence plan
+    if($data['X-customPlanRecu']){
+
+      //Update Options in Order
+      $optionsArray = json_decode(json_encode($order->options), true);
+      $optionsArray['external_subscription_id'] = $data['subscriptionId'];
+      $dataToUpdateOrder['options'] = $optionsArray;
+
+      //Update Comment
+      $dataToUpdateOrder["comment"] .= " -- External SubscriptionId: ".$data['subscriptionId'];
+
+      //Add subscription ID to options history
+      $optionsHistory["external_subscription_id"] = $data['subscriptionId'];
+
+    }
+
+  }
+
+  /**
+   * Status to Cancel an subscription | Utilizado cuando es una renovacion en teoria desde el panel administrador de CCBIll o automatica
+   * @newStatusOrder (puede originarse de varios estados)
+   */
+  public function cancelSubscriptionFromStatus(string $cod, $newStatusOrder): int
+  {
+
+    if($newStatusOrder==7 || $cod=="Cancellation" || $cod=="Expiration" || $cod=="Refund" || $cod=="Void")
+      return true;
+    else
+      return false;
+
   }
 
 }

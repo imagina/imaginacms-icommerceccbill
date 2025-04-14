@@ -42,3 +42,13 @@ Allowed Events:
 Follow the specific configurations described in the official documentation: [Admin Portal FAQ.](https://ccbill.com/doc/admin-portal-faq#ftoc-heading-11)
 
 To perform tests with cards, use the numbers provided here: [Test Credit Card Numbers.](https://ccbill.com/kb/test-credit-card-numbers#ftoc-heading-6)
+
+## Subscriptions
+
+### Configurations
+
+- The module is configured for Recurring and Non-recurring subscriptions.
+- CCBill is responsible for configuring the data for the API (username, password) [Datalink System]
+
+### API Errors Code
+https://ccbill.com/doc/ccbill-api-guide#error_codes

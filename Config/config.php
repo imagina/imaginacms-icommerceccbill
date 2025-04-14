@@ -8,6 +8,7 @@ return [
     * Urls
     */
     'baseFlexUrl' => 'https://api.ccbill.com/wap-frontflex/flexforms/',
+    'cancelSubscription' => 'https://datalink.ccbill.com/utils/subscriptionManagement.cgi',
 
     /**
      * Currencies

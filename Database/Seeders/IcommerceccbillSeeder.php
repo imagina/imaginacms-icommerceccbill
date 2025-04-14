@@ -36,6 +36,8 @@ class IcommerceccbillSeeder extends Seeder
             $options['subAccountNumber'] = null;
             $options['flexFormId'] = null;
             $options['saltKey'] = null;
+            $options['userName'] = null;
+            $options['pass'] = null;
 
             $options['minimunAmount'] = 0;
             $options['maximumAmount'] = 300;

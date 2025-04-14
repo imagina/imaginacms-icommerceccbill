@@ -109,6 +109,26 @@ return [
                 'label' => 'icommerceccbill::icommerceccbills.table.saltKey'
             ]
         ],
+        'userName' => [
+            'value' => null,
+            'name' => 'userName',
+            'isFakeField' => true,
+            'type' => 'input',
+            'props' => [
+                'label' => 'icommerceccbill::icommerceccbills.table.userName',
+                'hint' => 'icommerceccbill::icommerceccbills.table.used by api',
+            ]
+        ],
+        'pass' => [
+            'value' => null,
+            'name' => 'pass',
+            'isFakeField' => true,
+            'type' => 'input',
+            'props' => [
+                'label' => 'icommerceccbill::icommerceccbills.table.pass',
+                'hint' => 'icommerceccbill::icommerceccbills.table.used by api',
+            ],
+        ],
         'minimunAmount' => [
           'value' => null,
           'name' => 'minimunAmount',
